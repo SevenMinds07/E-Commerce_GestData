@@ -1,0 +1,505 @@
+{
+  "name": "Pipeline DataOps E-commerce ITY1101",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "77c8ad47-bc0a-4760-9b95-738d198cae67",
+      "name": "▶️ Ejecutar Pipeline (Manual)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        3136,
+        736
+      ],
+      "notes": "Haz clic en Execute Workflow para iniciar el pipeline durante la demo"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// LOG FINAL - Resumen consolidado de la ejecución\n// ============================================================\n\nconst kpi = $input.first().json;\n\nconst summary = {\n  ejecutado_en: kpi.run_timestamp,\n  pipeline:     kpi.pipeline,\n  resumen: {\n    ingestados:  kpi.kpis.total_records_ingested,\n    validos:     kpi.kpis.records_valid,\n    invalidos:   kpi.kpis.records_invalid,\n    cargados:    kpi.kpis.records_loaded,\n    completitud: kpi.kpis.completitud_pct + '%',\n    tasa_error:  kpi.kpis.tasa_error_pct  + '%'\n  },\n  alertas:   kpi.alerts,\n  resultado: kpi.alerts.length === 0 ? '✅ PIPELINE EXITOSO' : '⚠️ PIPELINE CON ALERTAS'\n};\n\nconsole.log('============================================');\nconsole.log('[PIPELINE FINALIZADO]', summary.resultado);\nconsole.log('Completitud:', summary.resumen.completitud);\nconsole.log('Tasa de error:', summary.resumen.tasa_error);\nconsole.log('Registros cargados:', summary.resumen.cargados);\nconsole.log('============================================');\n\nreturn [{ json: summary }];\n"
+      },
+      "id": "a5d710e4-2857-4bc3-a85a-4fafb4777e79",
+      "name": "Log Final - Auditoría",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5056,
+        736
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// KPI MONITOREO - Lee logs directamente desde nodos anteriores\n// ============================================================\n\n// Leer outputs de nodos anteriores directamente\nlet ingestLog, cleanLog, validationLog, loadLog;\n\ntry {\n  const ingestaOutput = $('ETAPA 1c - Log de Ingesta').first().json;\n  ingestLog = ingestaOutput.ingestLog || {\n    records_read: $('ETAPA 1c - Log de Ingesta').all().length,\n    timestamp: new Date().toISOString(),\n    source: 'ventas_ecommerce.xlsx',\n    status: 'OK'\n  };\n} catch(e) { ingestLog = { records_read: 0 }; }\n\ntry {\n  cleanLog = $('ETAPA 2 - Limpieza y Transformación').first().json.log || {};\n} catch(e) { cleanLog = {}; }\n\ntry {\n  validationLog = $('ETAPA 3 - Validación Estructural y Semántica').first().json.log || {};\n} catch(e) { validationLog = {}; }\n\nconst totalRecords   = ingestLog.records_read          || 0;\nconst validRecords   = validationLog.valid_records     || 0;\nconst invalidRecords = validationLog.invalid_records   || 0;\nconst loadedRecords  = validRecords; // los que pasaron validación\n\nconst completitud = totalRecords > 0 ? ((validRecords / totalRecords) * 100).toFixed(1) : 0;\nconst tasaError   = totalRecords > 0 ? ((invalidRecords / totalRecords) * 100).toFixed(1) : 0;\n\nconst kpiReport = {\n  pipeline:      'Pipeline DataOps E-commerce',\n  run_timestamp: new Date().toISOString(),\n  kpis: {\n    total_records_ingested: totalRecords,\n    records_valid:          validRecords,\n    records_invalid:        invalidRecords,\n    records_loaded:         loadedRecords,\n    completitud_pct:        parseFloat(completitud),\n    tasa_error_pct:         parseFloat(tasaError)\n  },\n  alerts: [\n    ...(parseFloat(tasaError)   > 5  ? ['⚠️ ALERTA: Tasa de error supera el 5%'] : []),\n    ...(parseFloat(completitud) < 95 ? ['⚠️ ALERTA: Completitud bajo el 95%']    : [])\n  ],\n  stage_logs: { ingest: ingestLog, clean: cleanLog, validation: validationLog }\n};\n\nconsole.log('[KPI] Completitud:', completitud + '%', '| Error:', tasaError + '%');\nconsole.log('[KPI] Alertas activas:', kpiReport.alerts.length);\n\nreturn [{ json: kpiReport }];\n"
+      },
+      "id": "6530280c-5506-439c-935b-40a923c280c8",
+      "name": "KPI Monitoreo del Pipeline",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4848,
+        736
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/1bdOrNLgn0MDklVgG7juFSc2k6UA-p3vTiJXMB8q1xwU/edit?usp=sharing",
+          "__regex": "https:\\/\\/(?:drive|docs)\\.google\\.com(?:\\/.*|)\\/d\\/([0-9a-zA-Z\\-_]+)(?:\\/.*|)"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "ventas_limpias",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "order_id"
+          ],
+          "schema": [
+            {
+              "id": "order_id",
+              "displayName": "order_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "customer_name",
+              "displayName": "customer_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "product",
+              "displayName": "product",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "quantity",
+              "displayName": "quantity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "order_date",
+              "displayName": "order_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "region",
+              "displayName": "region",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "loaded_at",
+              "displayName": "loaded_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "_pipeline_logs",
+              "displayName": "_pipeline_logs",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "e469f9b0-b699-432f-81aa-419da81de6f8",
+      "name": "Google Sheets - Hoja ventas_limpias",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        4624,
+        736
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "ZEQuzfBAF7IDVVqr",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/1bdOrNLgn0MDklVgG7juFSc2k6UA-p3vTiJXMB8q1xwU/edit?usp=sharing",
+          "__regex": "https:\\/\\/(?:drive|docs)\\.google\\.com(?:\\/.*|)\\/d\\/([0-9a-zA-Z\\-_]+)(?:\\/.*|)"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "cuarentena",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "order_id"
+          ],
+          "schema": [
+            {
+              "id": "order_id",
+              "displayName": "order_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "raw_data",
+              "displayName": "raw_data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "issues",
+              "displayName": "issues",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "detected_at",
+              "displayName": "detected_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "ce29df51-ca64-477d-99f0-f88152ebe4f1",
+      "name": "Google Sheets - Hoja cuarentena",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        4624,
+        960
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "ZEQuzfBAF7IDVVqr",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// CUARENTENA: Registros Inválidos → Hoja 'cuarentena'\n// ============================================================\n\nconst input = $input.first().json;\nconst invalid = input.invalidData || [];\n\nconsole.log('[CUARENTENA] Registros en cuarentena:', invalid.length);\n\nif (invalid.length === 0) {\n  return [{ json: { message: 'Sin registros inválidos en esta ejecución' } }];\n}\n\nreturn invalid.map(r => ({\n  json: {\n    order_id:    r.order_id || 'NULL',\n    raw_data:    JSON.stringify(r),\n    issues:      (r._issues || []).join(' | '),\n    detected_at: new Date().toISOString()\n  }\n}));\n"
+      },
+      "id": "20e1698f-4e83-4350-a1b9-75728832a7a7",
+      "name": "Cuarentena - Registros Inválidos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4400,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// ETAPA 4: PREPARAR CARGA A GOOGLE SHEETS\n// ============================================================\n\nconst input = $input.first().json;\nconst valid = input.validData;\n\nconst loadLog = {\n  stage:           'CARGA',\n  timestamp:       new Date().toISOString(),\n  records_to_load: valid.length,\n  target:          'Google Sheets - Hoja: ventas_limpias',\n  status:          'READY'\n};\n\nconsole.log('[CARGA] Registros listos para Google Sheets:', valid.length);\n\nreturn valid.map((r, i) => ({\n  json: {\n    order_id:      r.order_id,\n    customer_name: r.customer_name,\n    product:       r.product,\n    quantity:      r.quantity,\n    price:         r.price,\n    order_date:    r.date,\n    email:         r.email,\n    region:        r.region,\n    loaded_at:     new Date().toISOString(),\n    _pipeline_logs: i === 0 ? {\n      ingest:     input.ingestLog,\n      clean:      input.cleanLog,\n      validation: input.log,\n      load:       loadLog\n    } : null\n  }\n}));\n"
+      },
+      "id": "87e5499a-ec7d-43fd-9672-6684e2c45bb0",
+      "name": "ETAPA 4 - Preparar Carga",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4400,
+        736
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// ETAPA 3: VALIDACIÓN ESTRUCTURAL Y SEMÁNTICA\n// ============================================================\n\nconst input = $input.first().json;\nconst data  = input.cleanedData;\n\nif (!data || !Array.isArray(data)) {\n  throw new Error('cleanedData no encontrado o no es un array. Verifica que el nodo de Limpieza esté conectado correctamente.');\n}\n\nconst valid   = [];\nconst invalid = [];\n\nconst emailRegex   = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\nconst validRegions = ['RM','BIO','VAL','ARI','TAR','ATK','COQ','OHI','MAU','LRI','LLA','AYS','MAG'];\n\nfor (const row of data) {\n  const issues = [...(row._errors || [])];\n\n  // Validación ESTRUCTURAL\n  if (!row.order_id)      issues.push('[STRUCT] order_id es nulo o vacío');\n  if (!row.customer_name) issues.push('[STRUCT] customer_name vacío');\n  if (!row.product)       issues.push('[STRUCT] product vacío');\n  if (!row.date)          issues.push('[STRUCT] date vacío');\n\n  // Validación SEMÁNTICA\n  if (row.quantity <= 0 || isNaN(row.quantity)) issues.push('[SEM] quantity debe ser > 0, valor: ' + row.quantity);\n  if (row.price   <= 0 || isNaN(row.price))    issues.push('[SEM] price debe ser > 0, valor: ' + row.price);\n  if (row.email && !emailRegex.test(row.email)) issues.push('[SEM] email inválido: ' + row.email);\n  if (row.region && !validRegions.includes(row.region)) issues.push('[SEM] región no reconocida: ' + row.region);\n\n  const clean = { ...row };\n  delete clean._errors;\n\n  if (issues.length === 0) {\n    valid.push({ ...clean, _valid: true });\n  } else {\n    invalid.push({ ...clean, _valid: false, _issues: issues });\n  }\n}\n\nconst validationLog = {\n  stage:           'VALIDACION',\n  timestamp:       new Date().toISOString(),\n  total_records:   data.length,\n  valid_records:   valid.length,\n  invalid_records: invalid.length,\n  invalid_detail:  invalid.map(r => ({ order_id: r.order_id, issues: r._issues })),\n  status:          invalid.length === 0 ? 'OK' : 'WARNING'\n};\n\nconsole.log('[VALIDACION] Válidos:', valid.length, '| Inválidos:', invalid.length);\n\nreturn [{\n  json: {\n    validData:   valid,\n    invalidData: invalid,\n    log:         validationLog,\n    ingestLog:   input.ingestLog,\n    cleanLog:    input.log\n  }\n}];\n"
+      },
+      "id": "583105cf-03e9-4503-83ab-6499b7b6ebe5",
+      "name": "ETAPA 3 - Validación Estructural y Semántica",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4176,
+        736
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// ETAPA 2: LIMPIEZA Y TRANSFORMACIÓN\n// Recibe los items del Spreadsheet File (1 item = 1 fila)\n// y los limpia uno por uno.\n// ============================================================\n\nconst items = $input.all();\nconst errors = [];\nconst cleaned = [];\n\n// Función para convertir número serial de Excel a fecha ISO\nfunction excelSerialToDate(serial) {\n  if (typeof serial === 'number') {\n    const excelEpoch = new Date(1899, 11, 30);\n    const date = new Date(excelEpoch.getTime() + serial * 86400000);\n    return date.toISOString().split('T')[0];\n  }\n  return String(serial);\n}\n\nfor (const item of items) {\n  const row = { ...item.json };\n  const rowErrors = [];\n\n  // Limpiar nulls\n  for (const key of Object.keys(row)) {\n    if (row[key] === null || row[key] === undefined) row[key] = '';\n  }\n\n  // Normalizar fecha\n  if (row.date) {\n    if (typeof row.date === 'number') {\n      row.date = excelSerialToDate(row.date);\n    } else {\n      row.date = String(row.date).replace(/\\//g, '-').trim();\n    }\n    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(row.date)) {\n      rowErrors.push('Formato de fecha inválido: ' + row.date);\n    }\n  }\n\n  // Limpiar strings\n  if (row.customer_name) row.customer_name = String(row.customer_name).trim();\n  if (row.product)       row.product       = String(row.product).trim();\n  if (row.region)        row.region        = String(row.region).trim().toUpperCase();\n  if (row.email)         row.email         = String(row.email).trim().toLowerCase();\n  if (row.order_id)      row.order_id      = String(row.order_id).trim();\n\n  // Convertir numéricos\n  row.quantity = parseInt(row.quantity, 10);\n  row.price    = parseFloat(row.price);\n\n  if (isNaN(row.quantity)) rowErrors.push('quantity no es número: ' + item.json.quantity);\n  if (isNaN(row.price))    rowErrors.push('price no es número: ' + item.json.price);\n\n  row._errors = rowErrors;\n  cleaned.push(row);\n\n  if (rowErrors.length > 0) errors.push({ order_id: row.order_id, errors: rowErrors });\n}\n\nconst cleanLog = {\n  stage:               'LIMPIEZA',\n  timestamp:           new Date().toISOString(),\n  records_processed:   cleaned.length,\n  records_with_errors: errors.length,\n  error_detail:        errors,\n  status:              'OK'\n};\n\nconsole.log('[LIMPIEZA] Procesados:', cleaned.length, '| Con errores:', errors.length);\n\n// Pasar ingestLog desde el primer item si existe, o construir uno básico\nconst ingestLog = items[0]?.json?.ingestLog || {\n  stage:        'INGESTA',\n  timestamp:    new Date().toISOString(),\n  records_read: cleaned.length,\n  source:       'ventas_ecommerce.xlsx',\n  status:       'OK'\n};\n\nreturn [{ json: { cleanedData: cleaned, log: cleanLog, ingestLog } }];\n"
+      },
+      "id": "d0592e51-4f7f-4117-aaa0-0194f0279356",
+      "name": "ETAPA 2 - Limpieza y Transformación",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3968,
+        736
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// ETAPA 1c: LOG DE INGESTA\n// Recibe los items del Spreadsheet File y genera el log.\n// NO agrupa los datos, los pasa tal cual al siguiente nodo.\n// ============================================================\n\nconst items = $input.all();\n\nconst ingestLog = {\n  stage:        'INGESTA',\n  timestamp:    new Date().toISOString(),\n  records_read: items.length,\n  source:       'Google Drive — ventas_ecommerce.xlsx',\n  columns:      items.length > 0 ? Object.keys(items[0].json) : [],\n  status:       items.length > 0 ? 'OK' : 'ERROR - Archivo vacío'\n};\n\nconsole.log('[INGESTA] Archivo Excel descargado desde Google Drive');\nconsole.log('[INGESTA] Registros encontrados:', items.length);\nconsole.log('[INGESTA] Columnas detectadas:', ingestLog.columns.join(', '));\n\nif (items.length === 0) {\n  throw new Error('El archivo Excel está vacío o no tiene datos en Sheet1');\n}\n\n// Pasar cada item individual con el ingestLog adjunto\nreturn items.map((item, i) => ({\n  json: {\n    ...item.json,\n    ingestLog: i === 0 ? ingestLog : undefined\n  }\n}));\n"
+      },
+      "id": "e5b81326-3c99-4936-b5a5-dc83bfcc8751",
+      "name": "ETAPA 1c - Log de Ingesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3744,
+        736
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "headerRow": true,
+          "sheetName": "Sheet1"
+        }
+      },
+      "id": "a5d237d0-4c1f-4714-b816-9b02e37cc094",
+      "name": "ETAPA 1b - Parsear Excel a JSON",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 2,
+      "position": [
+        3536,
+        736
+      ],
+      "notes": "Convierte el Excel descargado a objetos JSON. Una fila = un item. La primera fila se usa como headers."
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1cDAZMn0NznkVZCuLfUFCSXAZOYaiMh5X7qnSqtxLXWk/edit?usp=sharing",
+          "mode": "url"
+        },
+        "options": {}
+      },
+      "id": "b8285377-e01c-41d4-a0ae-0b9f8579acee",
+      "name": "ETAPA 1a - Descargar Excel desde Google Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        3344,
+        736
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "c3oW1de8ndZV4Q2I",
+          "name": "Google Drive OAuth2 API"
+        }
+      },
+      "notes": "Conecta tu cuenta Google y pega el ID del archivo. El ID está en la URL del archivo: drive.google.com/file/d/ESTE_ES_EL_ID/view"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "▶️ Ejecutar Pipeline (Manual)": {
+      "main": [
+        [
+          {
+            "node": "ETAPA 1a - Descargar Excel desde Google Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KPI Monitoreo del Pipeline": {
+      "main": [
+        [
+          {
+            "node": "Log Final - Auditoría",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Hoja ventas_limpias": {
+      "main": [
+        [
+          {
+            "node": "KPI Monitoreo del Pipeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cuarentena - Registros Inválidos": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Hoja cuarentena",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ETAPA 4 - Preparar Carga": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Hoja ventas_limpias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ETAPA 3 - Validación Estructural y Semántica": {
+      "main": [
+        [
+          {
+            "node": "ETAPA 4 - Preparar Carga",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Cuarentena - Registros Inválidos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ETAPA 2 - Limpieza y Transformación": {
+      "main": [
+        [
+          {
+            "node": "ETAPA 3 - Validación Estructural y Semántica",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ETAPA 1c - Log de Ingesta": {
+      "main": [
+        [
+          {
+            "node": "ETAPA 2 - Limpieza y Transformación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ETAPA 1b - Parsear Excel a JSON": {
+      "main": [
+        [
+          {
+            "node": "ETAPA 1c - Log de Ingesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ETAPA 1a - Descargar Excel desde Google Drive": {
+      "main": [
+        [
+          {
+            "node": "ETAPA 1b - Parsear Excel a JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "13273b59-b0be-4743-95a9-f9d1b0e1ae53",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f657fa7b6b5989cacef23a1e86b0896d33256911ed85db3cb0b30ab636442500"
+  },
+  "id": "5zinOKmT7GvqurSk",
+  "tags": []
+}
